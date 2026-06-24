@@ -6,3 +6,7 @@ The tool is vibe coded with Gemini 3.5.
 
 A live demo is available via pages:
 https://frode-sandnes.github.io/pivotal-self-citation-plots/
+
+
+The repository for the first version of the tool:
+https://github.com/frode-sandnes/h-index-boost-viz
