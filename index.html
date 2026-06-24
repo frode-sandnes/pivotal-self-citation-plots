@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenAlex Bibliometric Extractor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Modern Dark Mode Palette */
+        :root {
+            --bg-primary: #121214;
+            --bg-secondary: #1a1a1e;
+            --bg-tertiary: #26262b;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+            --border: #334155;
+            --success: #10b981;
+            --btn-secondary: #475569;
+            --btn-secondary-hover: #334155;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            padding: 2rem 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            background-color: var(--bg-secondary);
+            padding: 2rem;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            margin-bottom: 0.5rem;
+            color: #fff;
+        }
+
+        p.subtitle {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            font-size: 0.95rem;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 1rem;
+        }
+
+        .load-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 2rem;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        button {
+            background-color: var(--accent);
+            color: #fff;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: var(--accent-hover);
+        }
+
+        button.select-btn {
+            background-color: var(--btn-secondary);
+            padding: 0.4rem 0.8rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+            border-radius: 4px;
+        }
+
+        button.select-btn:hover {
+            background-color: var(--btn-secondary-hover);
+        }
+
+        /* Status Indicators */
+        .status {
+            margin-bottom: 1.5rem;
+            padding: 0.75rem;
+            border-radius: 6px;
+            display: none;
+            font-size: 0.95rem;
+        }
+        .status.loading {
+            display: block;
+            background-color: rgba(99, 102, 241, 0.15);
+            border: 1px solid var(--accent);
+            color: #a5b4fc;
+        }
+        .status.error {
+            display: block;
+            background-color: rgba(239, 68, 68, 0.15);
+            border: 1px solid #ef4444;
+            color: #fca5a5;
+        }
+
+        /* Author Cards List */
+        .results-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .author-card {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.25rem;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .author-card:hover {
+            transform: translateY(-2px);
+            border-color: #475569;
+        }
+
+        .author-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.75rem;
+            gap: 10px;
+        }
+
+        .author-action-container {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+        }
+
+        /* Card Progress Bar Style */
+        .card-progress {
+            width: 140px;
+            height: 6px;
+            accent-color: var(--success);
+            border-radius: 3px;
+            overflow: hidden;
+            border: none;
+            background-color: var(--bg-secondary);
+        }
+
+        .author-identity {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .author-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .author-id {
+            font-size: 0.8rem;
+            background-color: var(--bg-secondary);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            color: var(--text-secondary);
+            font-family: monospace;
+            border: 1px solid var(--border);
+            width: fit-content;
+        }
+
+        /* Affiliation Layout */
+        .institutions-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 1.25rem;
+        }
+
+        .institution-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            background-color: rgba(255, 255, 255, 0.02);
+            padding: 0.35rem 0.6rem;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .institution-icon {
+            color: var(--accent);
+            font-size: 0.95rem;
+        }
+
+        .country-badge {
+            font-size: 0.75rem;
+            background-color: var(--border);
+            color: var(--text-primary);
+            padding: 0.1rem 0.35rem;
+            border-radius: 3px;
+            font-weight: 600;
+            margin-left: auto;
+        }
+
+        .meta-stats {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border);
+            padding-top: 0.75rem;
+        }
+
+        .stat-item span {
+            color: var(--text-secondary);
+            margin-right: 0.25rem;
+        }
+
+        .stat-item strong {
+            color: var(--success);
+        }
+
+        /* Visualization Wrapper Box */
+        .vis-container {
+            width: 100%;
+            max-width: 900px;
+            background-color: var(--bg-secondary);
+            padding: 2rem;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            display: none;
+        }
+
+        .vis-container h2 {
+            font-size: 1.4rem;
+            margin-bottom: 0.25rem;
+            color: #fff;
+        }
+
+        /* Author Name Display Element */
+        #authorHeaderName {
+            font-size: 1.1rem;
+            color: var(--accent);
+            margin-bottom: 1.25rem;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.75rem;
+        }
+
+        /* Slider Styles */
+        .slider-wrapper {
+            margin-bottom: 1.5rem;
+            background-color: var(--bg-tertiary);
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.95rem;
+            color: var(--text-primary);
+        }
+
+        .slider-header strong {
+            color: var(--accent);
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        /* Action Buttons Wrapper */
+        .action-footer {
+            margin-top: 1.5rem;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .save-btn {
+            background-color: var(--success);
+        }
+
+        .save-btn:hover {
+            background-color: #059669;
+        }
+
+        .json-btn {
+            background-color: #2563eb;
+        }
+
+        .json-btn:hover {
+            background-color: #1d4ed8;
+        }
+
+        .load-btn-accent {
+            background-color: #475569;
+        }
+        .load-btn-accent:hover {
+            background-color: #334155;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="searchContainer" class="container">
+        <h1>OpenAlex Bibliometric Extractor</h1>
+        <p class="subtitle">Identify profiles to unpack complex global citation, topic, and co-authorship records.</p>
+
+        <div class="search-box">
+            <input type="text" id="authorInput" placeholder="Enter author name..." autocomplete="off">
+            <button id="searchBtn">Search Graph</button>
+        </div>
+
+        <div class="load-box">
+            <input type="file" id="jsonFileInput" accept=".json" style="display: none;">
+            <button id="loadJsonBtn" class="load-btn-accent">Load Local Data Snapshot</button>
+        </div>
+
+        <div id="statusMessage" class="status"></div>
+        <div id="results" class="results-container"></div>
+    </div>
+
+    <div id="visualizationWrapper" class="vis-container">
+        <h2>Pivotal Self-Citation Plot (with firends) for OpenAlex</h2>
+        <div id="authorHeaderName">-</div>
+        
+        <div class="slider-wrapper">
+            <div class="slider-header">
+                <span>Timeline Active Range Filter:</span>
+                <span>Selected Year: <strong id="selectedYearDisplay">-</strong></span>
+            </div>
+            <input type="range" id="timeSlider" min="2000" max="2026" value="2026">
+        </div>
+
+        <div style="position: relative; width: 100%; height: auto; min-height: 500px;">
+            <canvas id="citationChart"></canvas>
+        </div>
+
+        <div class="action-footer">
+            <button id="saveJsonDataBtn" class="json-btn">Save Data Graph as JSON</button>
+            <button id="saveVisBtn" class="save-btn">Save Visualization as PNG</button>
+        </div>
+    </div>
+
+    <script>
+        let citationChartInstance = null; // Track live chart state to clear legacy draws
+        
+        // Retain global dataset states to support live timeline filtering adjustments
+        let globalRawAuthorObject = null;
+        let globalRawWorksList = [];
+        let globalRawCitationsMap = {};
+        let globalTargetAuthorId = '';
+        let globalAuthorDisplayName = '';
+
+        document.getElementById('searchBtn').addEventListener('click', performSearch);
+        document.getElementById('authorInput').addEventListener('keypress', function(e) {
+            if (e.key === 'enter' || e.keyCode === 13) {
+                performSearch();
+            }
+        });
+
+        // Add input event listener to change chart data dynamically on drag
+        document.getElementById('timeSlider').addEventListener('input', function() {
+            const selectedYear = parseInt(this.value);
+            document.getElementById('selectedYearDisplay').textContent = selectedYear;
+            filterAndVisualize(selectedYear);
+        });
+
+        // Trigger file input flow when user triggers the mock load button
+        document.getElementById('loadJsonBtn').addEventListener('click', function() {
+            document.getElementById('jsonFileInput').click();
+        });
+
+        // Listen for internal file updates from filesystem upload target
+        document.getElementById('jsonFileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const parsedData = JSON.parse(evt.target.result);
+                    
+                    if (!parsedData.authorData || !parsedData.worksData || !parsedData.citationsMap) {
+                        throw new Error("Invalid structure format. Missing configuration signatures.");
+                    }
+                    
+                    // Clear older validation lists instantly
+                    document.getElementById('results').innerHTML = '';
+                    document.getElementById('statusMessage').style.display = 'none';
+                    document.querySelector('.search-box').style.display = 'none';
+                    document.querySelector('.load-box').style.display = 'none';
+                    document.querySelector('p.subtitle').style.display = 'none';
+
+                    // Pipe historical elements straight into computation model without network fetching
+                    processAuthorData(parsedData.authorData, parsedData.worksData, parsedData.citationsMap);
+                } catch(err) {
+                    alert(`Failed to load file snapshot: ${err.message}`);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        // Serialization function to bundle active metrics and download them locally as text file
+        document.getElementById('saveJsonDataBtn').addEventListener('click', function() {
+            if (!globalRawAuthorObject || !globalRawWorksList.length) {
+                alert("No structural context dataset initialized to download yet.");
+                return;
+            }
+
+            const payload = {
+                authorData: globalRawAuthorObject,
+                worksData: { results: globalRawWorksList },
+                citationsMap: globalRawCitationsMap
+            };
+
+            const sanitizedName = globalAuthorDisplayName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            const fileName = `openalex_data_${sanitizedName}.json`;
+            
+            const stringifiedBlob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+            const temporaryLink = document.createElement('a');
+            
+            temporaryLink.download = fileName;
+            temporaryLink.href = URL.createObjectURL(stringifiedBlob);
+            
+            document.body.appendChild(temporaryLink);
+            temporaryLink.click();
+            document.body.removeChild(temporaryLink);
+        });
+
+        // Action workflow to parse live layout canvas and generate a downloadable file
+        document.getElementById('saveVisBtn').addEventListener('click', function() {
+            if (!citationChartInstance) return;
+            
+            // Generate a clean filename using the author's name
+            const sanitizedName = globalAuthorDisplayName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            const selectedYear = document.getElementById('timeSlider').value;
+            const fileName = `openalex_vis_${sanitizedName}_to_${selectedYear}.png`;
+
+            // Create temporary download link element anchor properties
+            const imageLink = document.createElement('a');
+            imageLink.download = fileName;
+            imageLink.href = citationChartInstance.toBase64Image();
+            
+            // Execute automated click flow triggers to save context locally
+            document.body.appendChild(imageLink);
+            imageLink.click();
+            document.body.removeChild(imageLink);
+        });
+
+        // =============================================================
+        // PROCESS PIPELINE
+        // =============================================================
+        function processAuthorData(authorData, worksData, citationsMap) {
+            console.log(">>> processAuthorData triggered successfully!");
+            
+            globalRawAuthorObject = authorData;
+            globalTargetAuthorId = authorData.id;
+            globalRawWorksList = worksData.results || [];
+            globalRawCitationsMap = citationsMap;
+            globalAuthorDisplayName = authorData.display_name || "Unknown Author";
+
+            // Map configuration metadata parameter tracking fields dynamically above visual cards
+            document.getElementById('authorHeaderName').textContent = `Profile Data Graph for: ${globalAuthorDisplayName}`;
+
+            // Compute active range limits dynamically based on publication data attributes
+            if (globalRawWorksList.length > 0) {
+                const years = globalRawWorksList.map(w => w.publication_year).filter(y => y);
+                if (years.length > 0) {
+                    const minYear = Math.min(...years);
+                    const maxYear = Math.max(...years);
+                    
+                    const slider = document.getElementById('timeSlider');
+                    slider.min = minYear;
+                    slider.max = maxYear;
+                    slider.value = maxYear; 
+                    document.getElementById('selectedYearDisplay').textContent = maxYear;
+                }
+            }
+
+            // HIDE THE LAST REMAINING AUTHOR CARD NOW THAT VISUALIZATION IS READY
+            document.getElementById('searchContainer').style.display = 'none';
+
+            // Trigger data preparation and presentation loop
+            filterAndVisualize(parseInt(document.getElementById('timeSlider').value));
+        }
+
+        // Helper framework to isolate and partition raw data arrays based on timeline boundaries
+        function filterAndVisualize(selectedYear) {
+            const filteredWorks = globalRawWorksList.filter(w => w.publication_year <= selectedYear);
+
+            // Establish unique co-author indices bound entirely within the filtered publication collection
+            const coAuthorsSet = new Set();
+            filteredWorks.forEach(work => {
+                const authorships = work.authorships || [];
+                authorships.forEach(authorship => {
+                    if (authorship.author && authorship.author.id) {
+                        const currentAuthorId = authorship.author.id;
+                        if (currentAuthorId !== globalTargetAuthorId) {
+                            coAuthorsSet.add(currentAuthorId);
+                        }
+                    }
+                });
+            });
+            const coAuthors = Array.from(coAuthorsSet);
+
+            // Recompute individual citation elements based on timeline cut-off conditions
+            filteredWorks.forEach(work => {
+                let selfCites = 0;
+                let coAuthorCites = 0;
+                
+                const rawCitingPapers = globalRawCitationsMap[work.id] || [];
+                
+                const filteredCitingPapers = rawCitingPapers.filter(citingPaper => 
+                    citingPaper.publication_year <= selectedYear
+                );
+
+                filteredCitingPapers.forEach(citingPaper => {
+                    const citingAuthorships = citingPaper.authorships || [];
+                    
+                    const isSelfCitation = citingAuthorships.some(authorship => 
+                        authorship.author && authorship.author.id === globalTargetAuthorId
+                    );
+
+                    if (isSelfCitation) {
+                        selfCites++;
+                    } else {
+                        const isCoAuthorCitation = citingAuthorships.some(authorship => 
+                            authorship.author && authorship.author.id && coAuthors.includes(authorship.author.id)
+                        );
+                        
+                        if (isCoAuthorCitation) {
+                            coAuthorCites++;
+                        }
+                    }
+                });
+
+                work.selfCitationCount = selfCites;
+                work.coAuthorCitationCount = coAuthorCites;
+                work.totalFilteredCitations = filteredCitingPapers.length;
+                work.externalCitationCount = Math.max(0, filteredCitingPapers.length - selfCites - coAuthorCites);
+            });
+
+            // Order papers dynamically based on metrics under targeted time frame variables
+            filteredWorks.sort((a, b) => b.totalFilteredCitations - a.totalFilteredCitations);
+
+            // MODIFICATION: Compute h-index DYNAMICALLY based on the active, ordered timeline works
+            let dynamicHIndex = 0;
+            for (let i = 0; i < filteredWorks.length; i++) {
+                if (filteredWorks[i].totalFilteredCitations >= (i + 1)) {
+                    dynamicHIndex = i + 1;
+                } else {
+                    break;
+                }
+            }
+            
+            // REQUIRED DIAGNOSTIC OUTPUT
+            console.log(`[Diagnostic] Dynamic Timeline hIndex for ${selectedYear}: ${dynamicHIndex}`);
+
+            visualize(filteredWorks, dynamicHIndex);
+        }
+
+        // =============================================================
+        // VISUALIZATION ENGINE (HORIZONTAL BAR CHART + H-CORE IN-FRONT PLUGIN)
+        // =============================================================
+        function visualize(sortedWorks, hIndex) {
+            const visWrapper = document.getElementById('visualizationWrapper');
+            const ctx = document.getElementById('citationChart').getContext('2d');
+            
+            visWrapper.style.display = 'block'; 
+            
+            if (citationChartInstance) {
+                citationChartInstance.destroy();
+            }
+
+            const labels = sortedWorks.map((w, index) => {
+                const prefix = `${index + 1}: `;
+                const shortTitle = w.title ? (w.title.length > 30 ? w.title.substring(0, 27) + '...' : w.title) : 'Untitled Work';
+                return prefix + shortTitle;
+            });
+
+            const externalCitesData = sortedWorks.map(w => w.externalCitationCount);
+            const selfCitesData = sortedWorks.map(w => w.selfCitationCount);
+            const coAuthorCitesData = sortedWorks.map(w => w.coAuthorCitationCount);
+
+            const fullTitles = sortedWorks.map(w => w.title || 'Untitled Work');
+            const authorsListStrings = sortedWorks.map(w => {
+                const authorships = w.authorships || [];
+                return authorships.map(a => a.author ? a.author.display_name : 'Unknown').join(', ');
+            });
+
+            // Custom Plugin to draw the h-core highlight boundary IN FRONT of the data bars
+            const hCoreHighlightPlugin = {
+                id: 'hCoreHighlightPlugin',
+                afterDraw: (chart) => {
+                    const { ctx, scales: { x, y } } = chart;
+                    
+                    if (hIndex <= 0 || sortedWorks.length === 0) return;
+
+                    const startX = x.getPixelForValue(0);
+                    const endX = x.getPixelForValue(hIndex);
+                    const startY = y.getPixelForValue(0) - (y.calculateTickBoxWidth ? 0 : 20); 
+                    
+                    const targetBarIndex = Math.min(hIndex - 1, sortedWorks.length - 1);
+                    const spacingOffset = sortedWorks.length > 1 ? (y.getPixelForValue(1) - y.getPixelForValue(0)) / 2 : 20;
+                    const endY = y.getPixelForValue(targetBarIndex) + spacingOffset;
+
+                    ctx.save();
+                    ctx.fillStyle = 'rgba(254, 240, 138, 0.2)'; 
+                    ctx.strokeStyle = 'rgba(234, 179, 8, 1.0)';
+                    ctx.lineWidth = 4.0; 
+                    ctx.setLineDash([6, 4]); 
+
+                    const rectWidth = endX - startX;
+                    const rectHeight = endY - startY;
+
+                    ctx.fillRect(startX, startY, rectWidth, rectHeight);
+                    ctx.strokeRect(startX, startY, rectWidth, rectHeight);
+                    ctx.restore();
+                }
+            };
+
+            // Instantiate Stacked Horizontal Bar Graph Configuration
+            citationChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'External Citations',
+                            data: externalCitesData,
+                            backgroundColor: '#3b82f6',
+                            borderWidth: 0
+                        },
+                        {
+                            label: 'Self-Citations',
+                            data: selfCitesData,
+                            backgroundColor: '#ef4444',
+                            borderWidth: 0
+                        },
+                        {
+                            label: 'Co-Author Citations',
+                            data: coAuthorCitesData,
+                            backgroundColor: '#10b981',
+                            borderWidth: 0
+                        }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y', 
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            stacked: true, 
+                            grid: { color: '#334155' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        y: {
+                            stacked: true, 
+                            grid: { display: false },
+                            ticks: { 
+                                color: '#e2e8f0',
+                                crossAlign: 'start'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: { color: '#e2e8f0', font: { weight: '600' } }
+                        },
+                        tooltip: {
+                            enabled: true,
+                            backgroundColor: '#1a1a1e',
+                            titleColor: '#fff',
+                            bodyColor: '#94a3b8',
+                            borderColor: '#475569',
+                            borderWidth: 1,
+                            padding: 12,
+                            callbacks: {
+                                title: function(context) {
+                                    const index = context[0].dataIndex;
+                                    return `Paper ${index + 1}: ${fullTitles[index]}`;
+                                },
+                                beforeBody: function(context) {
+                                    const index = context[0].dataIndex;
+                                    const hCoreStatus = index < hIndex ? '⭐ INSIDE AUTHOR H-CORE' : 'Outside H-Core';
+                                    return `Authors: ${authorsListStrings[index]}\nStatus: ${hCoreStatus}\nYear: ${sortedWorks[index].publication_year}\n----------------------------------------`;
+                                },
+                                label: function(context) {
+                                    return ` ${context.dataset.label}: ${context.raw}`;
+                                }
+                            }
+                        }
+                    }
+                },
+                plugins: [hCoreHighlightPlugin] 
+            });
+
+            visWrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        async function performSearch() {
+            const query = document.getElementById('authorInput').value.trim();
+            const statusDiv = document.getElementById('statusMessage');
+            const resultsDiv = document.getElementById('results');
+            const visWrapper = document.getElementById('visualizationWrapper');
+            
+            resultsDiv.innerHTML = '';
+            visWrapper.style.display = 'none';
+            statusDiv.className = 'status';
+            statusDiv.style.display = 'none';
+
+            if (!query) {
+                showStatus('Please enter an author name to look up.', 'error');
+                return;
+            }
+
+            showStatus('Querying OpenAlex API ecosystem...', 'loading');
+
+            try {
+                const url = `https://api.openalex.org/authors?search=${encodeURIComponent(query)}`;
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`API Connection Failed (Status: ${response.status})`);
+                }
+
+                const data = await response.json();
+                
+                if (!data.results || data.results.length === 0) {
+                    showStatus('No matching authors found inside the OpenAlex index.', 'error');
+                    return;
+                }
+
+                statusDiv.style.display = 'none';
+
+                document.querySelector('.search-box').style.display = 'none';
+                document.querySelector('.load-box').style.display = 'none';
+                document.querySelector('p.subtitle').style.display = 'none';
+                
+                data.results.forEach(author => {
+                    const rawId = author.id;
+                    const shortId = rawId.split('/').pop(); 
+                    const worksApiUrl = author.works_api_url; 
+
+                    let institutionsHTML = '';
+                    const affiliations = author.last_known_institutions || [];
+
+                    if (affiliations.length > 0) {
+                        affiliations.forEach(inst => {
+                            const countryBadge = inst.country_code ? `<span class="country-badge">${inst.country_code}</span>` : '';
+                            institutionsHTML += `
+                                <div class="institution-item">
+                                    <span class="institution-icon">🏛️</span>
+                                    <span>${inst.display_name}</span>
+                                    ${countryBadge}
+                                </div>
+                            `;
+                        });
+                    } else {
+                        institutionsHTML = `
+                            <div class="institution-item" style="font-style: italic; opacity: 0.6;">
+                                <span class="institution-icon">❓</span>
+                                <span>No verified institutional affiliations listed</span>
+                            </div>
+                        `;
+                    }
+
+                    const card = document.createElement('div');
+                    card.className = 'author-card';
+                    card.innerHTML = `
+                        <div class="author-header">
+                            <div class="author-identity">
+                                <div class="author-name">${author.display_name}</div>
+                                <div class="author-id" title="Full OpenAlex Identifier: ${rawId}">${shortId}</div>
+                            </div>
+                            <div class="author-action-container">
+                                <button class="select-btn" data-id="${shortId}" data-works-url="${worksApiUrl}">Select Author</button>
+                                <progress class="card-progress" value="0" max="100" style="display: none;"></progress>
+                            </div>
+                        </div>
+                        
+                        <div class="institutions-list">
+                            ${institutionsHTML}
+                        </div>
+                        
+                        <div class="meta-stats">
+                            <div class="stat-item"><span>Works Profiled:</span> <strong>${author.works_count.toLocaleString()}</strong></div>
+                            <div class="stat-item"><span>Total Citations:</span> <strong>${author.cited_by_count.toLocaleString()}</strong></div>
+                        </div>
+                    `;
+
+                    card.querySelector('.select-btn').addEventListener('click', async function() {
+                        const authorId = this.getAttribute('data-id');
+                        const targetWorksUrl = this.getAttribute('data-works-url');
+                        const originalText = this.textContent;
+                        const progressBar = card.querySelector('.card-progress');
+                        
+                        const siblingCards = resultsDiv.querySelectorAll('.author-card');
+                        siblingCards.forEach(c => {
+                            if (c !== card) {
+                                c.style.display = 'none';
+                            }
+                        });
+                        
+                        try {
+                            this.textContent = 'Fetching Profile...';
+                            this.disabled = true;
+                            
+                            progressBar.removeAttribute('value');
+                            progressBar.style.display = 'block';
+                            
+                            const apiAuthorUrl = `https://api.openalex.org/authors/${authorId}`;
+                            
+                            const [authorRes, worksRes] = await Promise.all([
+                                fetch(apiAuthorUrl),
+                                fetch(targetWorksUrl)
+                            ]);
+                            
+                            if (!authorRes.ok) throw new Error('Failed to resolve author details.');
+                            if (!worksRes.ok) throw new Error('Failed to resolve works timeline index.');
+                            
+                            const authorProfileData = await authorRes.json();
+                            const worksProfileData = await worksRes.json();
+                            const worksList = worksProfileData.results || [];
+                            
+                            const citationsMap = {};
+                            worksList.forEach(work => {
+                                citationsMap[work.id] = []; 
+                            });
+
+                            if (worksList.length > 0) {
+                                progressBar.max = worksList.length;
+                                progressBar.value = 0;
+
+                                for (let w = 0; w < worksList.length; w++) {
+                                    const work = worksList[w];
+                                    
+                                    if (work.cited_by_count > 0) {
+                                        this.textContent = `Mapping Citations (${w + 1}/${worksList.length})...`;
+                                        
+                                        try {
+                                            const shortWorkId = work.id.split('/').pop();
+                                            const citationQueryUrl = `https://api.openalex.org/works?filter=cites:${shortWorkId}&per_page=100`;
+                                            const citationResponse = await fetch(citationQueryUrl);
+                                            
+                                            if (citationResponse.ok) {
+                                                const citationData = await citationResponse.json();
+                                                citationsMap[work.id] = citationData.results || [];
+                                            }
+                                        } catch (fetchErr) {
+                                            console.warn(`Could not pull citation items for key ${work.id}:`, fetchErr);
+                                        }
+                                    }
+                                    progressBar.value = w + 1;
+                                }
+                            }
+                            
+                            processAuthorData(authorProfileData, worksProfileData, citationsMap);
+                            
+                        } catch (err) {
+                            console.error(err);
+                            alert(`Error retrieving detailed graph metadata: ${err.message}`);
+                            siblingCards.forEach(c => c.style.display = 'block');
+                            progressBar.style.display = 'none';
+                        } finally {
+                            this.textContent = originalText;
+                            this.disabled = false;
+                        }
+                    });
+
+                    resultsDiv.appendChild(card);
+                });
+
+            } catch (err) {
+                console.error(err);
+                showStatus(`Extraction Error: ${err.message}. Please verify connection network status.`, 'error');
+            }
+        }
+
+        function showStatus(text, type) {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.textContent = text;
+            statusDiv.className = `status ${type}`;
+        }
+    </script>
+</body>
+</html>
